@@ -204,7 +204,7 @@ Resources:
         ScheduleEvent:
           Type: ScheduleV2
           Properties:
-            ScheduleExpression: "cron(0 0 * * ? *)" # 15 minutes past, at midnight
+            ScheduleExpression: "cron(0 0 * * ? *)"
             ScheduleExpressionTimezone: Europe/Stockholm
             Input: |
               {
