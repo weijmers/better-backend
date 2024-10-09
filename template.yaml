@@ -74,12 +74,12 @@ Resources:
       CodeUri: ./Api
       Handler: Api
       Layers:
-        - !ImportValue s3-copy-file-dotnet-LayerVersionArn
+        - !ImportValue s3-copy-file-dotnet-LayerVersionArn # this layer has to be deployed on the correct region
       Environment:
         Variables:
           BUCKET: !Ref Bucket
-          S3_BUCKET: !Ref Bucket # variable used the layer 
-          S3_KEY: database.db # variable used the layer
+          S3_BUCKET: !Ref Bucket # variable used in the layer 
+          S3_KEY: database.db # variable used in the layer
       Policies:
         - S3ReadPolicy:
             BucketName: !Ref Bucket
