@@ -1,0 +1,232 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform:
+  - AWS::Serverless-2016-10-31
+
+Globals:
+  Function:
+    Runtime: dotnet8
+    MemorySize: 256
+    AutoPublishAlias: current
+    Timeout: 10
+
+Resources:
+  Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      NotificationConfiguration:
+        EventBridgeConfiguration:
+          EventBridgeEnabled: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireFixtures
+            Status: Enabled
+            ExpirationInDays: 7
+            
+  SettingsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: "PK"
+          AttributeType: "S"
+        - AttributeName: "SK"
+          AttributeType: "S"
+      KeySchema:
+        - AttributeName: "PK"
+          KeyType: "HASH"
+        - AttributeName: "SK"
+          KeyType: "RANGE"
+      BillingMode: PAY_PER_REQUEST
+      
+  GamesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: "Id" # "{CountryCode}#{HomeTeam}#{AwayTeam}"
+          AttributeType: "S"
+        - AttributeName: "Date" # "{Date}"
+          AttributeType: "S"
+        - AttributeName: "Type" # "RESULT" | "FIXTURE"
+          AttributeType: "S"
+      KeySchema:
+        - AttributeName: "Id"
+          KeyType: "HASH"
+        - AttributeName: "Date"
+          KeyType: "RANGE"
+      GlobalSecondaryIndexes:
+        - IndexName: "TypeIndex"
+          KeySchema:
+            - AttributeName: "Type"
+              KeyType: "HASH"
+            - AttributeName: "Date"
+              KeyType: "RANGE"
+          Projection:
+            ProjectionType: "ALL"
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: false
+      TimeToLiveSpecification:
+        AttributeName: Expiration
+        Enabled: true
+
+  ApiProxyFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./Api
+      Handler: Api
+      Layers:
+        - !ImportValue s3-copy-file-dotnet-LayerVersionArn
+      Environment:
+        Variables:
+          BUCKET: !Ref Bucket
+          S3_BUCKET: !Ref Bucket # variable used the layer 
+          S3_KEY: database.db # variable used the layer
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Ref Bucket
+      Events:
+        Root:
+          Type: Api
+          Properties:
+            Path: /
+            Method: ANY
+        SecureProxy:
+          Type: Api
+          Properties:
+            Path: /secure/{proxy+}
+            Method: ANY
+        Proxy:
+          Type: Api
+          Properties:
+            Path: /{proxy+}
+            Method: ANY
+
+  ImportFixturesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./Importer
+      Handler: Importer::Importer.Fixtures::Handler
+      MemorySize: 512
+      Timeout: 30
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Ref Bucket
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GamesTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SettingsTable
+      Environment:
+        Variables:
+          BUCKET: !Ref Bucket
+          GAMES_TABLE: !Ref GamesTable
+          SETTINGS_TABLE: !Ref SettingsTable
+            
+  ImportResultsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./Importer
+      Handler: Importer::Importer.Results::Handler
+      MemorySize: 512
+      Timeout: 30
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Ref Bucket
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GamesTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SettingsTable
+      Environment:
+        Variables:
+          BUCKET: !Ref Bucket
+          GAMES_TABLE: !Ref GamesTable
+          SETTINGS_TABLE: !Ref SettingsTable
+            
+  SeederFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./Seeder
+      Handler: Seeder::Seeder.Seeder::Handler
+      MemorySize: 1024
+      Timeout: 180
+      Policies:
+        - S3WritePolicy:
+            BucketName: !Ref Bucket
+        - DynamoDBReadPolicy:
+            TableName: !Ref GamesTable
+      Environment:
+        Variables:
+          BUCKET: !Ref Bucket
+          GAMES_TABLE: !Ref GamesTable
+          
+  # TODO: should probably add some kind of catch state inside the map,
+  # but that's not fun, so lets do some other stuff.
+  ImportAndSeedStateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Definition:
+        StartAt: ImportFixtures
+        States:
+          ImportFixtures:
+            Type: Task
+            Resource: !GetAtt ImportFixturesFunction.Arn
+            ResultPath: null # pass on the input
+            Next: CheckImportResultsProperty
+          CheckImportResultsProperty:
+            Type: Choice
+            Choices:
+              - Variable: "$.importResults"
+                IsPresent: true
+                Next: ImportResultsMap
+            Default: SeedGames
+          ImportResultsMap:
+            Type: Map
+            ItemsPath: "$.importResults"
+            ResultPath: null # pass on the input
+            Iterator:
+              StartAt: ImportResults
+              States:
+                ImportResults:
+                  Type: Task
+                  Resource: !GetAtt ImportResultsFunction.Arn
+                  End: true
+            Next: SeedGames
+          SeedGames:
+            Type: Task
+            Resource: !GetAtt SeederFunction.Arn
+            End: true
+      Policies:
+        - LambdaInvokePolicy:
+            FunctionName: !Ref ImportFixturesFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref ImportResultsFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref SeederFunction
+      Events:
+        ScheduleEvent:
+          Type: ScheduleV2
+          Properties:
+            ScheduleExpression: "cron(0 0 * * ? *)" # 15 minutes past, at midnight
+            ScheduleExpressionTimezone: Europe/Stockholm
+            Input: |
+              {
+                "importResults": [
+                  { "countryCode": "E", "division": 1 },
+                  { "countryCode": "E", "division": 2 },
+                  { "countryCode": "E", "division": 3 },
+                  { "countryCode": "E", "division": 4 },
+                  { "countryCode": "E", "division": 5 },
+                  { "countryCode": "D", "division": 1 },
+                  { "countryCode": "D", "division": 2 },
+                  { "countryCode": "I", "division": 1 },
+                  { "countryCode": "I", "division": 2 },
+                  { "countryCode": "SP", "division": 1 },
+                  { "countryCode": "SP", "division": 2 },
+                  { "countryCode": "F", "division": 1 },
+                  { "countryCode": "F", "division": 2 }
+                ]
+              }
+        
+
+Outputs:
+  Api:
+    Description: "API Gateway endpoint URL for Prod stage"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
