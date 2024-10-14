@@ -214,14 +214,23 @@ Resources:
                   { "countryCode": "E", "division": 3 },
                   { "countryCode": "E", "division": 4 },
                   { "countryCode": "E", "division": 5 },
-                  { "countryCode": "D", "division": 1 },
+                  { "countryCode": "SC", "division": 1 },
+                  { "countryCode": "SC", "division": 2 },
+                  { "countryCode": "SC", "division": 3 },
+                  { "countryCode": "SC", "division": 4 },
+                  { "countryCode": "SC", "division": 1 },
                   { "countryCode": "D", "division": 2 },
                   { "countryCode": "I", "division": 1 },
                   { "countryCode": "I", "division": 2 },
                   { "countryCode": "SP", "division": 1 },
                   { "countryCode": "SP", "division": 2 },
                   { "countryCode": "F", "division": 1 },
-                  { "countryCode": "F", "division": 2 }
+                  { "countryCode": "F", "division": 2 },
+                  { "countryCode": "N", "division": 1 },
+                  { "countryCode": "B", "division": 1 },
+                  { "countryCode": "P", "division": 1 },
+                  { "countryCode": "T", "division": 1 },
+                  { "countryCode": "G", "division": 1 }
                 ]
               }
         

@@ -41,12 +41,15 @@ public class Fixtures
         using var csv = new CsvReader(reader, new CsvConfiguration(CultureInfo.InvariantCulture)
         {
             MissingFieldFound = null,
+            BadDataFound = args =>
+            {
+                _logger.LogError("Error on {Record}", args.RawRecord);
+            }
         });
         csv.Context.RegisterClassMap<FixtureMap>();
 
         foreach (var fixture in csv.GetRecords<Game>())
         {
-            Console.WriteLine(JsonSerializer.Serialize(fixture));
             await _ddbRepository.SaveGame(fixture, CancellationToken.None);
         }
         

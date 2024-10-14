@@ -3,11 +3,11 @@ using System.Data.SQLite;
 
 namespace Api;
 
-public class Repository
+public class Database
 {
     private readonly IDbConnection _connection;
 
-    public Repository(string connectionString)
+    public Database(string connectionString)
     {
         _connection = new SQLiteConnection(connectionString);
         _connection.Open();

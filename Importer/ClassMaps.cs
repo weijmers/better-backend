@@ -57,6 +57,8 @@ public abstract class GameMap : ClassMap<Game>
     private static string ConvertCountryCode(ConvertFromStringArgs args)
     {
         var countryAndDivision = args.Row.GetField("Div") ?? throw new ArgumentException("Missing {Div}.");
+        if (countryAndDivision is "") return "";
+        
         var countryCode = countryAndDivision[..^1];
         return countryCode;
     }
@@ -64,18 +66,19 @@ public abstract class GameMap : ClassMap<Game>
     private static int ConvertDivision(ConvertFromStringArgs args)
     {
         var countryAndDivision = args.Row.GetField("Div") ?? throw new ArgumentException("Missing {Div}.");
+        if (countryAndDivision is "") return 0;
+        
         var countryCode = countryAndDivision[..^1];
         var division = countryAndDivision[^1];
 
-        int parsedDivision;
-        int.TryParse($"{division}", out parsedDivision);
+        int.TryParse($"{division}", out var parsedDivision);
         
         if (!char.IsDigit(division))
         {
             parsedDivision = 4;
         }
 
-        if (countryCode == "E")
+        if (countryCode is "E" or "SC")
         {
             parsedDivision += 1;
         }
@@ -87,7 +90,8 @@ public abstract class GameMap : ClassMap<Game>
     {
         var date = args.Row.GetField("Date") ?? throw new ArgumentException("Missing {Date}.");
         var time = args.Row.GetField("Time") ?? "00:00";
-            
+        if (date is "") return DateTime.MinValue;
+        
         if (DateTime.TryParseExact($"{date} {time}", "dd/MM/yyyy HH:mm",
                 CultureInfo.InvariantCulture,
                 DateTimeStyles.AdjustToUniversal,

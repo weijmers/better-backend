@@ -7,10 +7,13 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddAWSLambdaHosting(LambdaEventSource.RestApi);
-builder.Services.AddSingleton<Repository>(_ => new Repository("Data Source=/tmp/database.db;Version=3;"));
+builder.Services.AddSingleton<Database>(_ => new Database("Data Source=/tmp/database.db;Version=3;"));
 builder.Services.AddSingleton<Controller>();
 
 var app = builder.Build();
+
+app.Use(Middlewares.HandleExceptions);
+
 var controller = app.Services.GetRequiredService<Controller>();
 
 // Configure the HTTP request pipeline.

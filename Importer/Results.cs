@@ -56,6 +56,10 @@ public class Results
         using var csv = new CsvReader(reader, new CsvConfiguration(CultureInfo.InvariantCulture)
         {
             MissingFieldFound = null,
+            BadDataFound = args =>
+            {
+                _logger.LogError("Error on {Record}", args.RawRecord);
+            }
         });
         csv.Context.RegisterClassMap<ResultMap>();
 
@@ -78,6 +82,11 @@ public class Results
         if (countryCode == "E")
         {
             if (division == 5) return "C";
+            return $"{division - 1}";
+        }
+
+        if (countryCode == "SC")
+        {
             return $"{division - 1}";
         }
         
